@@ -12,15 +12,29 @@ namespace HashUpdater
 {
     public class Updater
     {
+        /// <summary>
+        /// Config class, must compile it!
+        /// </summary>
+        
         public class Config
         {
+            /// <summary>
+            /// Path Directory
+            /// </summary>
             public static string Path { get; set; }
+            /// <summary>
+            /// File with hashes, save location .json
+            /// </summary>
             public static string MD5File { get; set; }
+            /// <summary>
+            /// Bool var, create or not hashes file
+            /// </summary>
             public static bool CreateMD5File { get; set; }
         }
 
         protected string GetMd5HashFromFile(string fileName)
         {
+
             try
             {
                 using (var md5 = MD5.Create())
@@ -54,6 +68,10 @@ namespace HashUpdater
         } //Get all files list of dir.
 
         protected Dictionary<string, string> Hashes = new Dictionary<string, string>(); // DIR/FILE, MD5
+
+        /// <summary>
+        /// Create Recursive file hashes of a directory and save them into a json file or a local variable
+        /// </summary>
 
         public string CreateHashes() //Create Hashes to Json
         {
