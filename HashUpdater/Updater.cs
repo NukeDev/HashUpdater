@@ -1,9 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
+using System.Net;
 using System.Security.Cryptography;
-using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Newtonsoft.Json;
@@ -25,11 +25,19 @@ namespace HashUpdater
             /// <summary>
             /// File with hashes, save location .json
             /// </summary>
-            public static string MD5File { get; set; }
+            public static string Md5File { get; set; }
             /// <summary>
             /// Bool var, create or not hashes file
             /// </summary>
-            public static bool CreateMD5File { get; set; }
+            public static bool CreateMd5File { get; set; }
+            /// <summary>
+            /// http:// - https:// - web link for json file with latest hashes
+            /// </summary>
+            public static Uri Md5Uri { get; set; }
+            /// <summary>
+            /// http:// - https:// - web link for latest files
+            /// </summary>
+            public static Uri WebFolder { get; set; }
         }
 
         protected string GetMd5HashFromFile(string fileName)
@@ -51,7 +59,7 @@ namespace HashUpdater
                 return null;
             }
            
-        } //Create MD5Hash for file.
+        } 
 
         protected string[] FilesPath(string path)
         {
@@ -63,36 +71,36 @@ namespace HashUpdater
             {
                 MessageBox.Show(ex.ToString(), "Error!", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return null;
-            }
-           
-        } //Get all files list of dir.
+            }        
+        } 
 
-        protected Dictionary<string, string> Hashes = new Dictionary<string, string>(); // DIR/FILE, MD5
+        protected Dictionary<string, string> Hashes = new Dictionary<string, string>();
+        protected Dictionary<string, string> OnlineHashesList = new Dictionary<string, string>();
+        protected List<string> FilesOutOfDate = new List<string>();
+        protected string OnlineHashesJson = string.Empty;
 
         /// <summary>
         /// Create Recursive file hashes of a directory and save them into a json file or a local variable
         /// </summary>
 
-        public string CreateHashes() //Create Hashes to Json
+        public string CreateHashes() 
         {
             if (Config.Path.ToString() != string.Empty)
-            {
-                
+            {    
                 try
                 {
                     var files = FilesPath(Config.Path.ToString());
                     foreach (var file in files)
                     {
                         var hash = GetMd5HashFromFile(file);
-                        Hashes.Add(file, hash);
+                        Hashes.Add(file.Replace(Config.Path + "\\", ""), hash);
                     }
-
                     var json = JsonConvert.SerializeObject(Hashes);
-                    if (Config.CreateMD5File == true)
-                        if(Config.MD5File == string.Empty)
-                            MessageBox.Show("Can't write md5 to json file! Please set MD5File var in the Updater.Config", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                        else
-                            File.WriteAllText(Config.MD5File.ToString(), json);
+                    if (Config.CreateMd5File != true) return json;
+                    if(Config.Md5File == string.Empty)
+                        MessageBox.Show("Can't write md5 to json file! Please set MD5File var in the Updater.Config", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    else
+                        File.WriteAllText(Config.Md5File.ToString(), json);
 
                     return json;
                 }
@@ -105,10 +113,123 @@ namespace HashUpdater
             }
             else
             {
-                MessageBox.Show("Path var not Set!", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show("Config.Path var not Set!", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return null;
+            }          
+        }
+
+        /// <summary>
+        /// Get latest hashes from webserver to json var
+        /// </summary>
+        
+        public string OnlineHashes()
+        {
+            if (Config.Md5Uri.ToString() != string.Empty)
+            {
+                try
+                {
+                    WebClient wb = new WebClient();
+                    OnlineHashesJson = wb.DownloadString(Config.Md5Uri);
+                    OnlineHashesList = JsonConvert.DeserializeObject<Dictionary<string, string>>(OnlineHashesJson);
+                    return OnlineHashesJson;
+                }   
+
+                catch (WebException ex)
+                {
+                    MessageBox.Show(ex.ToString(), "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return null;
+                }
+            }
+            else
+            {
+                MessageBox.Show("Config.Md5Uri var not Set!", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return null;
             }
-            
         }
+
+        /// <summary>
+        /// Analyze file differences
+        /// </summary>
+        
+        public async void Analyze()
+        {
+            foreach (var key in OnlineHashesList.Keys)
+            {
+                if (Hashes.ContainsKey(key))
+                {
+                    if (Hashes[key] != OnlineHashesList[key])
+                    {
+                        FilesOutOfDate.Add(key);
+                    }
+                }
+                else
+                {
+                    FilesOutOfDate.Add(key);
+                }
+            }
+
+            try
+            {
+                var totFiles = FilesOutOfDate.Count;
+                var downloaded = 0;
+                foreach (var file in FilesOutOfDate)
+                {
+                    var path = Config.Path + "\\" + file;
+                    if (File.Exists(path))
+                    {
+                        File.Delete(path);
+                    }
+
+                    var dir = path;
+                    var index = dir.LastIndexOf("\\", StringComparison.Ordinal);
+                    if (index > 0)
+                        dir = dir.Substring(0, index); 
+                    if (!Directory.Exists(dir))
+                    {
+                        Directory.CreateDirectory(dir);
+                    }
+                    Uri ur = new Uri(Config.WebFolder + "/" + file);
+                    downloaded++;
+                    await DownloadAsync(ur, path, downloaded + "/" + totFiles);
+                    
+                }
+                Thread.Sleep(50);
+                Console.WriteLine();
+                Console.WriteLine("Update Completed!");
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.ToString(), "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+
+
+        }
+
+        /// <summary>
+        /// Download file async
+        /// </summary>
+
+        protected async Task DownloadAsync(Uri url, string path, string filesN)
+        {
+            try
+            {
+                WebClient wb = new WebClient();
+                wb.DownloadProgressChanged += (s, e) =>
+                {
+                    Console.Write("\r{0}{1}{2}%", "Downloading... ### ", filesN + " ", e.ProgressPercentage);
+                };
+                wb.DownloadFileCompleted += (s, e) =>
+                {
+                    //Console.WriteLine("File: " + path + " Download Completed.");
+                };
+                await wb.DownloadFileTaskAsync(url, path);
+            }
+            catch (WebException ex)
+            {
+                MessageBox.Show(ex.ToString(), "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+
+        }
+
     }
 }
