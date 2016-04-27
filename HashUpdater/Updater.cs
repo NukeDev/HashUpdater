@@ -175,11 +175,6 @@ namespace HashUpdater
                 foreach (var file in FilesOutOfDate)
                 {
                     var path = Config.Path + "\\" + file;
-                    if (File.Exists(path))
-                    {
-                        File.Delete(path);
-                    }
-
                     var dir = path;
                     var index = dir.LastIndexOf("\\", StringComparison.Ordinal);
                     if (index > 0)
@@ -195,7 +190,8 @@ namespace HashUpdater
                 }
                 Thread.Sleep(50);
                 Console.WriteLine();
-                Console.WriteLine("Update Completed!");
+                Console.WriteLine();
+                Console.WriteLine(FilesOutOfDate.Count == 0 ? "No update needed!" : "Update Completed!");
             }
             catch (Exception ex)
             {
