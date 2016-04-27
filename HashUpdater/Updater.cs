@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Security.Cryptography;
 using System.Threading;
@@ -148,7 +149,7 @@ namespace HashUpdater
         }
 
         /// <summary>
-        /// Analyze file differences
+        /// Analyze file differences - Download/Update/Delete Files
         /// </summary>
         
         public async void Analyze()
@@ -189,9 +190,20 @@ namespace HashUpdater
                     
                 }
                 Thread.Sleep(50);
+
+                var totalFiles = FilesPath(Config.Path.ToString());
+                var _totalFiles = totalFiles.Select(file => file.Replace(Config.Path + "\\", "")).ToList();
+                var onlineFiles = OnlineHashesList.Keys.ToList();
+                var filesToDelete = _totalFiles.Where(file => !onlineFiles.Contains(file)).ToList();
+
+                foreach (var file in filesToDelete)
+                {
+                    File.Delete(Config.Path + "\\" + file);
+                }
+
                 Console.WriteLine();
                 Console.WriteLine();
-                Console.WriteLine(FilesOutOfDate.Count == 0 ? "No update needed!" : "Update Completed!");
+                Console.WriteLine(FilesOutOfDate.Count == 0 && filesToDelete.Count == 0 ? "No update needed!" : "Update Completed!");
             }
             catch (Exception ex)
             {
