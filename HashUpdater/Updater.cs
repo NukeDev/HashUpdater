@@ -195,9 +195,11 @@ namespace HashUpdater
                 var _totalFiles = totalFiles.Select(file => file.Replace(Config.Path + "\\", "")).ToList();
                 var onlineFiles = OnlineHashesList.Keys.ToList();
                 var filesToDelete = _totalFiles.Where(file => !onlineFiles.Contains(file)).ToList();
-
+                var totaFiles = 0;
                 foreach (var file in filesToDelete)
                 {
+                    totaFiles++;
+                    Console.WriteLine("Deleting: " + file + " -- " + totaFiles + "/" + filesToDelete.Count);
                     File.Delete(Config.Path + "\\" + file);
                 }
 
@@ -224,11 +226,11 @@ namespace HashUpdater
                 WebClient wb = new WebClient();
                 wb.DownloadProgressChanged += (s, e) =>
                 {
-                    Console.Write("\r{0}{1}{2}%", "Downloading... ### ", filesN + " ", e.ProgressPercentage);
+                    Console.WriteLine("\r{0}{1}{2}{3}%", "Downloading: " + path.Replace(Config.Path + "\\", "") +" -- ", filesN + " -- ", (e.BytesReceived / 1024d / 1024d).ToString("0.00") +"Mb/"+ (e.TotalBytesToReceive / 1024d / 1024d).ToString("0.00") + "Mb -- ", e.ProgressPercentage );
                 };
                 wb.DownloadFileCompleted += (s, e) =>
                 {
-                    //Console.WriteLine("File: " + path + " Download Completed.");
+                    
                 };
                 await wb.DownloadFileTaskAsync(url, path);
             }
@@ -239,5 +241,9 @@ namespace HashUpdater
 
         }
 
+      
     }
+
 }
+
+
