@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -39,6 +40,18 @@ namespace HashUpdater
             /// http:// - https:// - web link for latest files
             /// </summary>
             public static Uri WebFolder { get; set; }
+            /// <summary>
+            /// Path of lzma.exe compressor
+            /// </summary>
+            public static string LzmaCompressor { get; set; }
+            /// <summary>
+            /// Path compressed files
+            /// </summary>
+            public static string CompressedDir { get; set; }
+            /// <summary>
+            /// Bool, compress or not files
+            /// </summary>
+            public static bool Compress { get; set; }
         }
 
         protected string GetMd5HashFromFile(string fileName)
@@ -95,14 +108,34 @@ namespace HashUpdater
                     {
                         var hash = GetMd5HashFromFile(file);
                         Hashes.Add(file.Replace(Config.Path + "\\", ""), hash);
+                        
                     }
                     var json = JsonConvert.SerializeObject(Hashes);
-                    if (Config.CreateMd5File != true) return json;
-                    if(Config.Md5File == string.Empty)
-                        MessageBox.Show("Can't write md5 to json file! Please set MD5File var in the Updater.Config", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    else
-                        File.WriteAllText(Config.Md5File.ToString(), json);
-
+                    if (Config.CreateMd5File == true)
+                    {
+                        if (Config.Md5File == string.Empty)
+                            MessageBox.Show(
+                                "Can't write md5 to json file! Please set MD5File var in the Updater.Config", "Error",
+                                MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        else
+                            using (StreamWriter sw = new StreamWriter(Config.Md5File))
+                                sw.Write(json);
+                        if (Config.Compress != true) return json;
+                        if (!Directory.Exists(Config.CompressedDir)) return json;
+                        if (!File.Exists(Config.LzmaCompressor)) return json;
+                        foreach (var file in files)
+                        {
+                            CompressFile(file);
+                        }
+                        return json;
+                    }
+                    if (Config.Compress != true) return json;
+                    if (!Directory.Exists(Config.CompressedDir)) return json;
+                    if (!File.Exists(Config.LzmaCompressor)) return json;
+                    foreach (var file in files)
+                    {
+                        CompressFile(file);
+                    }
                     return json;
                 }
 
@@ -184,10 +217,10 @@ namespace HashUpdater
                     {
                         Directory.CreateDirectory(dir);
                     }
-                    Uri ur = new Uri(Config.WebFolder + "/" + file);
+                    Uri ur = new Uri(Config.WebFolder + "/" + file + ".lzma");
                     downloaded++;
                     await DownloadAsync(ur, path, downloaded + "/" + totFiles);
-                    
+                    await DecompressFile(path + ".lzma");
                 }
                 Thread.Sleep(50);
 
@@ -226,13 +259,13 @@ namespace HashUpdater
                 WebClient wb = new WebClient();
                 wb.DownloadProgressChanged += (s, e) =>
                 {
-                    Console.WriteLine("\r{0}{1}{2}{3}%", "Downloading: " + path.Replace(Config.Path + "\\", "") +" -- ", filesN + " -- ", (e.BytesReceived / 1024d / 1024d).ToString("0.00") +"Mb/"+ (e.TotalBytesToReceive / 1024d / 1024d).ToString("0.00") + "Mb -- ", e.ProgressPercentage );
+                    Console.WriteLine("{0}{1}{2}%", "Downloading: " + filesN + " -- ", (e.BytesReceived / 1024d / 1024d).ToString("0.00") +"Mb/"+ (e.TotalBytesToReceive / 1024d / 1024d).ToString("0.00") + "Mb -- ", e.ProgressPercentage );
                 };
                 wb.DownloadFileCompleted += (s, e) =>
                 {
                     
                 };
-                await wb.DownloadFileTaskAsync(url, path);
+                await wb.DownloadFileTaskAsync(url, path + ".lzma");
             }
             catch (WebException ex)
             {
@@ -241,7 +274,80 @@ namespace HashUpdater
 
         }
 
-      
+        /// <summary>
+        /// Compress Files Async
+        /// </summary>
+
+        protected async Task CompressFile(string file)
+        {
+            if (!System.IO.File.Exists(Config.LzmaCompressor)) return;
+            if (file.Contains(".lzma")) return;
+            Console.WriteLine("Compressing: " + file.Replace(Config.Path, ""));
+            var path = Config.CompressedDir + "\\" + file.Replace(Config.Path, "");
+            var dir = path;
+            var index = dir.LastIndexOf("\\", StringComparison.Ordinal);
+            if (index > 0)
+                dir = dir.Substring(0, index);
+            if (!Directory.Exists(dir))
+            {
+                Directory.CreateDirectory(dir);
+            }
+            await Compression(file);
+        }
+        
+        /// <summary>
+        /// Decompress Files Async
+        /// </summary>
+        
+        protected async Task DecompressFile(string file)
+        {
+            if (!System.IO.File.Exists(Config.LzmaCompressor)) return;
+            if (!file.Contains(".lzma")) return;
+            Console.WriteLine("Extracting: " + file.Replace(Config.Path, ""));
+            await Decompression(file);
+        }
+
+        #pragma warning disable CS1998
+        /// <summary>               
+        /// Compression Framework                
+        /// </summary>
+
+        protected virtual async Task Compression(string file)
+        {
+            using (Process process = Process.Start(new ProcessStartInfo()
+            {
+                FileName = Config.LzmaCompressor,
+                Arguments = "e " + file + " " + Config.CompressedDir + "\\" + file.Replace(Config.Path, "") + ".lzma -d21",
+                CreateNoWindow = true,
+                WindowStyle = ProcessWindowStyle.Hidden
+            }))
+
+            {
+                while (process != null && !process.HasExited)
+                    Thread.Sleep(300);
+            }
+        }
+
+        /// <summary>               
+        /// Decompression Framework                
+        /// </summary>
+
+        protected virtual async Task Decompression(string file)
+        {
+            using (Process process = Process.Start(new ProcessStartInfo()
+            {
+                FileName = Config.LzmaCompressor,
+                Arguments = "d " + file + " " + file.Replace(".lzma", "") + " -d21",
+                CreateNoWindow = true,
+                WindowStyle = ProcessWindowStyle.Hidden
+            }))
+
+            {
+                while (process != null && !process.HasExited)
+                    Thread.Sleep(300);
+            }
+        }
+
     }
 
 }
