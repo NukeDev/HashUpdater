@@ -59,12 +59,11 @@ namespace HashUpdater
 
             try
             {
-                using (var md5 = MD5.Create())
+                using (FileStream stream = File.OpenRead(fileName))
                 {
-                    using (var stream = File.OpenRead(fileName))
-                    {
-                        return BitConverter.ToString(md5.ComputeHash(stream));
-                    }
+                    SHA256Managed sha = new SHA256Managed();
+                    byte[] checksum = sha.ComputeHash(stream);
+                    return BitConverter.ToString(checksum).Replace("-", String.Empty);
                 }
             }
             catch (Exception ex)
@@ -97,7 +96,7 @@ namespace HashUpdater
         /// Create Recursive file hashes of a directory and save them into a json file or a local variable
         /// </summary>
 
-        public string CreateHashes() 
+        public async Task<string> CreateHashes() 
         {
             if (Config.Path.ToString() != string.Empty)
             {    
@@ -125,7 +124,7 @@ namespace HashUpdater
                         if (!File.Exists(Config.LzmaCompressor)) return json;
                         foreach (var file in files)
                         {
-                            CompressFile(file);
+                            await CompressFile(file);
                         }
                         return json;
                     }
@@ -134,7 +133,7 @@ namespace HashUpdater
                     if (!File.Exists(Config.LzmaCompressor)) return json;
                     foreach (var file in files)
                     {
-                        CompressFile(file);
+                        await CompressFile(file);
                     }
                     return json;
                 }
@@ -220,7 +219,7 @@ namespace HashUpdater
                     Uri ur = new Uri(Config.WebFolder + "/" + file + ".lzma");
                     downloaded++;
                     await DownloadAsync(ur, path, downloaded + "/" + totFiles);
-                    await DecompressFile(path + ".lzma");
+                    
                 }
                 Thread.Sleep(50);
 
@@ -263,7 +262,7 @@ namespace HashUpdater
                 };
                 wb.DownloadFileCompleted += (s, e) =>
                 {
-                    
+                    DecompressFile(path + ".lzma");
                 };
                 await wb.DownloadFileTaskAsync(url, path + ".lzma");
             }
@@ -280,7 +279,6 @@ namespace HashUpdater
 
         protected async Task CompressFile(string file)
         {
-            if (!System.IO.File.Exists(Config.LzmaCompressor)) return;
             if (file.Contains(".lzma")) return;
             Console.WriteLine("Compressing: " + file.Replace(Config.Path, ""));
             var path = Config.CompressedDir + "\\" + file.Replace(Config.Path, "");
@@ -299,10 +297,8 @@ namespace HashUpdater
         /// Decompress Files Async
         /// </summary>
         
-        protected async Task DecompressFile(string file)
+        protected async void DecompressFile(string file)
         {
-            if (!System.IO.File.Exists(Config.LzmaCompressor)) return;
-            if (!file.Contains(".lzma")) return;
             Console.WriteLine("Extracting: " + file.Replace(Config.Path, ""));
             await Decompression(file);
         }
@@ -317,7 +313,7 @@ namespace HashUpdater
             using (Process process = Process.Start(new ProcessStartInfo()
             {
                 FileName = Config.LzmaCompressor,
-                Arguments = "e " + file + " " + Config.CompressedDir + "\\" + file.Replace(Config.Path, "") + ".lzma -d21",
+                Arguments = "e " + AddCommasIfRequired(file) + " " + AddCommasIfRequired(Config.CompressedDir + "\\" + file.Replace(Config.Path, "")) + ".lzma -d21",
                 CreateNoWindow = true,
                 WindowStyle = ProcessWindowStyle.Hidden
             }))
@@ -337,7 +333,7 @@ namespace HashUpdater
             using (Process process = Process.Start(new ProcessStartInfo()
             {
                 FileName = Config.LzmaCompressor,
-                Arguments = "d " + file + " " + file.Replace(".lzma", "") + " -d21",
+                Arguments = "d " + AddCommasIfRequired(file) + " " + AddCommasIfRequired(file.Replace(".lzma", "")) + " -d21",
                 CreateNoWindow = true,
                 WindowStyle = ProcessWindowStyle.Hidden
             }))
@@ -346,6 +342,15 @@ namespace HashUpdater
                 while (process != null && !process.HasExited)
                     Thread.Sleep(300);
             }
+        }
+        
+        /// <summary>               
+        /// Comma Path Checking              
+        /// </summary>
+ 
+        public string AddCommasIfRequired(string path)
+        {
+            return (path.Contains(" ")) ? "\"" + path + "\"" : path;
         }
 
     }
