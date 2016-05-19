@@ -15,5 +15,5 @@ Setup the Updater:
             up.CreateHashes(); //Make local files checksum
             up.OnlineHashes(); //Download latest checksum
             up.Analyze(); //analyze checksums differences, Download/Update/delete files
-            Console.Read();
+            Console.Read(); //Pause
             
